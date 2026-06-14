@@ -1,4 +1,6 @@
 import { generateStrokePlan } from "../lib/pipeline.ts";
+import { generatePainting } from "../lib/painterly.ts";
+import { PAINTERLY_PRESETS } from "../lib/types.ts";
 
 // Build a synthetic 80x80 image: cream background, a red square, a blue disc.
 const W = 80;
@@ -55,6 +57,32 @@ const blues = plan.strokes.filter((s) => {
 check("found a red region", reds.length >= 1);
 check("found a blue region", blues.length >= 1);
 
-console.log("\nsample stroke:", JSON.stringify(plan.strokes[0], null, 2).slice(0, 400));
+// ─── Painterly engine ────────────────────────────────────────────────────────
+console.log("\n--- painterly ---");
+const painting = generatePainting(imageData, W, H, PAINTERLY_PRESETS.balanced);
+console.log("brush strokes:", painting.strokes.length);
+
+check("painting produced strokes", painting.strokes.length >= 5);
+check("painting dimensions match", painting.width === W && painting.height === H);
+check("background is hex", /^#[0-9a-f]{6}$/.test(painting.background));
+check(
+  "coarse-to-fine ordering (levels non-decreasing)",
+  painting.strokes.every((s, i) => (i === 0 ? true : painting.strokes[i - 1].level <= s.level)),
+);
+check("brush ids in order", painting.strokes.every((s, i) => s.id === i));
+check(
+  "brushes have positive size + valid colour",
+  painting.strokes.every(
+    (s) => s.length > 0 && s.width > 0 && /^#[0-9a-f]{6}$/.test(s.color),
+  ),
+);
+check(
+  "opacity within range",
+  painting.strokes.every((s) => s.opacity > 0 && s.opacity <= 1),
+);
+check("brush hints non-empty", painting.strokes.every((s) => s.hint.length > 0));
+check("respects stroke cap", painting.strokes.length <= PAINTERLY_PRESETS.balanced.maxStrokes);
+
+console.log("\nsample brush:", JSON.stringify(painting.strokes[0]).slice(0, 300));
 console.log(ok ? "\nALL CHECKS PASSED" : "\nSOME CHECKS FAILED");
 process.exit(ok ? 0 : 1);

@@ -1,31 +1,45 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import PaintingCanvas from "@/components/PaintingCanvas";
 import StrokeCanvas from "@/components/StrokeCanvas";
 import { loadImageFile, type LoadedImage } from "@/lib/loadImage";
+import { generatePainting } from "@/lib/painterly";
 import { generateStrokePlan } from "@/lib/pipeline";
 import {
   DETAIL_PRESETS,
+  PAINTERLY_PRESETS,
   type DetailLevel,
+  type PaintingPlan,
+  type RenderMode,
   type StrokePlan,
 } from "@/lib/types";
 
-const SPEEDS = [0.5, 1, 2, 4];
+const SPEEDS = [0.5, 1, 2, 4, 8];
 const DETAIL_LEVELS: { value: DetailLevel; label: string }[] = [
   { value: "simple", label: "Simple" },
   { value: "balanced", label: "Balanced" },
   { value: "detailed", label: "Detailed" },
 ];
-const MAX_DIMENSION = 360; // load at the highest detail level's working size
+const MODES: { value: RenderMode; label: string }[] = [
+  { value: "painterly", label: "Painterly" },
+  { value: "outline", label: "Outline" },
+];
+const MAX_DIMENSION = 400; // load big enough for the most detailed preset
+
+type View =
+  | { mode: "outline"; plan: StrokePlan }
+  | { mode: "painterly"; plan: PaintingPlan };
 
 export default function Page() {
-  const [plan, setPlan] = useState<StrokePlan | null>(null);
+  const [view, setView] = useState<View | null>(null);
   const [loaded, setLoaded] = useState<LoadedImage | null>(null);
+  const [mode, setMode] = useState<RenderMode>("painterly");
   const [detail, setDetail] = useState<DetailLevel>("balanced");
   const [refUrl, setRefUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1.5); // strokes per second
+  const [speed, setSpeed] = useState(3); // strokes per second
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -36,34 +50,52 @@ export default function Page() {
   const lastTsRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const total = plan?.strokes.length ?? 0;
+  const total = view ? view.plan.strokes.length : 0;
 
-  const buildPlan = useCallback(async (img: LoadedImage, level: DetailLevel) => {
-    setError(null);
-    setProcessing(true);
-    setPlaying(false);
-    setProgress(0);
-    try {
-      // Yield a frame so the spinner paints before the synchronous pipeline.
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      const next = generateStrokePlan(
-        img.imageData,
-        img.sourceWidth,
-        img.sourceHeight,
-        DETAIL_PRESETS[level],
-      );
-      if (next.strokes.length === 0) {
-        setError("Couldn't find drawable regions in that image. Try one with clearer shapes.");
-        setPlan(null);
-      } else {
-        setPlan(next);
+  const buildPlan = useCallback(
+    async (img: LoadedImage, m: RenderMode, level: DetailLevel) => {
+      setError(null);
+      setProcessing(true);
+      setPlaying(false);
+      setProgress(0);
+      try {
+        // Yield a frame so the spinner paints before the synchronous pipeline.
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        if (m === "painterly") {
+          const plan = generatePainting(
+            img.imageData,
+            img.sourceWidth,
+            img.sourceHeight,
+            PAINTERLY_PRESETS[level],
+          );
+          if (plan.strokes.length === 0) {
+            setError("Couldn't derive strokes from that image. Try one with more contrast.");
+            setView(null);
+          } else {
+            setView({ mode: "painterly", plan });
+          }
+        } else {
+          const plan = generateStrokePlan(
+            img.imageData,
+            img.sourceWidth,
+            img.sourceHeight,
+            DETAIL_PRESETS[level],
+          );
+          if (plan.strokes.length === 0) {
+            setError("Couldn't find drawable regions in that image. Try one with clearer shapes.");
+            setView(null);
+          } else {
+            setView({ mode: "outline", plan });
+          }
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Something went wrong processing the image.");
+      } finally {
+        setProcessing(false);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong processing the image.");
-    } finally {
-      setProcessing(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -76,35 +108,44 @@ export default function Page() {
           return img.url;
         });
         setLoaded(img);
-        await buildPlan(img, detail);
+        await buildPlan(img, mode, detail);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't load that image.");
         setProcessing(false);
       }
     },
-    [buildPlan, detail],
+    [buildPlan, mode, detail],
+  );
+
+  const changeMode = useCallback(
+    (m: RenderMode) => {
+      setMode(m);
+      if (loaded) buildPlan(loaded, m, detail);
+    },
+    [loaded, detail, buildPlan],
   );
 
   const changeDetail = useCallback(
     (level: DetailLevel) => {
       setDetail(level);
-      if (loaded) buildPlan(loaded, level);
+      if (loaded) buildPlan(loaded, mode, level);
     },
-    [loaded, buildPlan],
+    [loaded, mode, buildPlan],
   );
 
   // Animation loop.
   useEffect(() => {
-    if (!playing || !plan) return;
+    if (!playing || !view) return;
+    const len = view.plan.strokes.length;
     const tick = (ts: number) => {
       if (lastTsRef.current == null) lastTsRef.current = ts;
       const dt = (ts - lastTsRef.current) / 1000;
       lastTsRef.current = ts;
       setProgress((p) => {
         const next = p + dt * speed;
-        if (next >= plan.strokes.length) {
+        if (next >= len) {
           setPlaying(false);
-          return plan.strokes.length;
+          return len;
         }
         return next;
       });
@@ -115,10 +156,10 @@ export default function Page() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       lastTsRef.current = null;
     };
-  }, [playing, plan, speed]);
+  }, [playing, view, speed]);
 
   const togglePlay = () => {
-    if (!plan) return;
+    if (!view) return;
     if (progress >= total) setProgress(0);
     setPlaying((p) => !p);
   };
@@ -132,18 +173,26 @@ export default function Page() {
   };
 
   const downloadPlan = () => {
-    if (!plan) return;
-    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    if (!view) return;
+    const blob = new Blob([JSON.stringify(view.plan, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "stroke-plan.json";
+    a.download = view.mode === "painterly" ? "painting-plan.json" : "stroke-plan.json";
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const currentStroke =
-    plan && total > 0 ? plan.strokes[Math.min(total - 1, Math.floor(progress))] : null;
+  const idx = Math.min(total - 1, Math.floor(progress));
+  const currentStroke = view && total > 0 ? view.plan.strokes[idx] : null;
+  const currentLabel =
+    view && currentStroke
+      ? view.mode === "outline"
+        ? (currentStroke as StrokePlan["strokes"][number]).layer
+        : (currentStroke as PaintingPlan["strokes"][number]).band
+      : "";
 
   return (
     <div className="app">
@@ -152,12 +201,13 @@ export default function Page() {
         <span className="tag">learn to draw any image, stroke by stroke</span>
       </header>
       <p className="lede">
-        Upload an image and AIrtist decomposes it into an ordered sequence of strokes —
-        the big forms first, then contours, then the fine detail — so you can follow
-        along and draw it yourself.
+        Upload an image and AIrtist turns it into an ordered sequence of strokes you can
+        follow. <strong>Painterly</strong> builds it up like a painting — broad base
+        masses first, fine accents last; <strong>Outline</strong> traces clean shape
+        contours.
       </p>
 
-      {!plan && !processing && (
+      {!view && !processing && (
         <Dropzone
           dragging={dragging}
           setDragging={setDragging}
@@ -175,30 +225,43 @@ export default function Page() {
 
       {error && <p className="error">{error}</p>}
 
-      {plan && !processing && (
+      {view && !processing && (
         <div className="studio">
           <div className="panel">
             <h2>Canvas</h2>
-            <StrokeCanvas
-              plan={plan}
-              progress={progress}
-              showFill={showFill}
-              showGhost={showGhost}
-            />
+            {view.mode === "painterly" ? (
+              <PaintingCanvas plan={view.plan} progress={progress} showGhost={showGhost} />
+            ) : (
+              <StrokeCanvas
+                plan={view.plan}
+                progress={progress}
+                showFill={showFill}
+                showGhost={showGhost}
+              />
+            )}
           </div>
 
           <div className="panel">
             <h2>Lesson</h2>
             <div className="controls">
+              <div className="btn-row" role="group" aria-label="Render mode">
+                {MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    className={`btn${mode === m.value ? " primary" : ""}`}
+                    onClick={() => changeMode(m.value)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="hint">
                 {currentStroke ? (
                   <>
                     <div className="meta">
-                      <span
-                        className="swatch"
-                        style={{ background: currentStroke.color }}
-                      />
-                      <span className="layer-pill">{currentStroke.layer}</span>
+                      <span className="swatch" style={{ background: currentStroke.color }} />
+                      <span className="layer-pill">{currentLabel}</span>
                       <span>
                         stroke {Math.min(total, Math.floor(progress) + 1)} / {total}
                       </span>
@@ -230,11 +293,7 @@ export default function Page() {
                 <button className="btn primary" onClick={togglePlay}>
                   {playing ? "Pause" : progress >= total ? "Replay" : "Play"}
                 </button>
-                <button
-                  className="btn"
-                  onClick={() => step(1)}
-                  disabled={progress >= total}
-                >
+                <button className="btn" onClick={() => step(1)} disabled={progress >= total}>
                   Next ›
                 </button>
                 <button
@@ -274,21 +333,23 @@ export default function Page() {
                 >
                   {SPEEDS.map((s) => (
                     <option key={s} value={s}>
-                      {s}× ({s} strokes/s)
+                      {s} strokes/s
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="toggles">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showFill}
-                    onChange={(e) => setShowFill(e.target.checked)}
-                  />
-                  Show colour fill
-                </label>
+                {view.mode === "outline" && (
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showFill}
+                      onChange={(e) => setShowFill(e.target.checked)}
+                    />
+                    Show colour fill
+                  </label>
+                )}
                 <label>
                   <input
                     type="checkbox"
@@ -334,10 +395,10 @@ export default function Page() {
       />
 
       <p className="footnote">
-        Runs entirely in your browser — images never leave your device. Strokes are
-        derived by colour-region decomposition (k-means quantisation → connected
-        components → boundary tracing → Douglas-Peucker simplification), ordered largest
-        form first.
+        Runs entirely in your browser — images never leave your device. Painterly mode is
+        coarse-to-fine stroke-based rendering: oriented brush dabs, largest masses first;
+        Outline mode is colour-region decomposition (quantise → connected components →
+        boundary tracing → simplify).
       </p>
     </div>
   );

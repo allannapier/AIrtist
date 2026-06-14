@@ -86,3 +86,96 @@ export const DETAIL_PRESETS: Record<DetailLevel, PipelineOptions> = {
 };
 
 export const DEFAULT_OPTIONS: PipelineOptions = DETAIL_PRESETS.balanced;
+
+// ─── Painterly (stroke-based rendering) ──────────────────────────────────────
+
+/** A single oriented brush dab. Strokes are emitted coarse-to-fine, so index 0
+ *  is the broadest base mass and later strokes are fine accents. */
+export interface BrushStroke {
+  id: number;
+  /** Centre in source-image pixels. */
+  x: number;
+  y: number;
+  /** Major axis (length along the stroke direction), source-image pixels. */
+  length: number;
+  /** Minor axis (brush width), source-image pixels. */
+  width: number;
+  /** Orientation in radians, aligned to local image structure. */
+  angle: number;
+  /** Brush colour, sampled from the target image (hex). */
+  color: string;
+  /** Paint opacity 0..1. */
+  opacity: number;
+  /** Coarse-to-fine pass index (0 = broadest). */
+  level: number;
+  /** Pedagogical band label for the lesson panel. */
+  band: string;
+  /** Teaching narration for this stroke. */
+  hint: string;
+}
+
+export interface PaintingPlan {
+  width: number;
+  height: number;
+  /** Canvas tone the strokes are laid over (hex) — the image's mean colour. */
+  background: string;
+  strokes: BrushStroke[];
+}
+
+export interface PainterlyOptions {
+  maxDimension: number;
+  /** Light blur before sampling colour/structure, to calm noise. */
+  sampleBlur: number;
+  /** Number of coarse-to-fine passes. */
+  levels: number;
+  /** Coarsest brush width as a fraction of the longest edge. */
+  coarsestFraction: number;
+  /** Finest brush width in processed-image pixels. */
+  finestPx: number;
+  /** Stroke length as a multiple of brush width. */
+  lengthRatio: number;
+  /** Grid spacing as a fraction of brush width (<1 overlaps). */
+  spacing: number;
+  /** Per-channel mean-squared error below which a cell is left alone. */
+  errorThreshold: number;
+  /** Hard cap on total strokes. */
+  maxStrokes: number;
+}
+
+export const PAINTERLY_PRESETS: Record<DetailLevel, PainterlyOptions> = {
+  simple: {
+    maxDimension: 320,
+    sampleBlur: 1.2,
+    levels: 4,
+    coarsestFraction: 0.2,
+    finestPx: 9,
+    lengthRatio: 2.6,
+    spacing: 0.6,
+    errorThreshold: 1500,
+    maxStrokes: 220,
+  },
+  balanced: {
+    maxDimension: 340,
+    sampleBlur: 1.0,
+    levels: 5,
+    coarsestFraction: 0.17,
+    finestPx: 5,
+    lengthRatio: 2.6,
+    spacing: 0.55,
+    errorThreshold: 900,
+    maxStrokes: 500,
+  },
+  detailed: {
+    maxDimension: 380,
+    sampleBlur: 0.8,
+    levels: 6,
+    coarsestFraction: 0.15,
+    finestPx: 3,
+    lengthRatio: 2.7,
+    spacing: 0.5,
+    errorThreshold: 500,
+    maxStrokes: 1100,
+  },
+};
+
+export type RenderMode = "outline" | "painterly";
