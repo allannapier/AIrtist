@@ -1,0 +1,60 @@
+import { generateStrokePlan } from "../lib/pipeline.ts";
+
+// Build a synthetic 80x80 image: cream background, a red square, a blue disc.
+const W = 80;
+const H = 80;
+const data = new Uint8ClampedArray(W * H * 4);
+function set(x: number, y: number, r: number, g: number, b: number) {
+  const p = (y * W + x) * 4;
+  data[p] = r;
+  data[p + 1] = g;
+  data[p + 2] = b;
+  data[p + 3] = 255;
+}
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    set(x, y, 225, 215, 185); // cream bg
+    if (x >= 10 && x < 35 && y >= 10 && y < 35) set(x, y, 200, 40, 40); // red square
+    const dx = x - 55;
+    const dy = y - 55;
+    if (dx * dx + dy * dy < 15 * 15) set(x, y, 50, 80, 190); // blue disc
+  }
+}
+
+const imageData = { data, width: W, height: H } as ImageData;
+const plan = generateStrokePlan(imageData, W, H);
+
+console.log("strokes:", plan.strokes.length);
+let ok = true;
+function check(name: string, cond: boolean) {
+  console.log(`${cond ? "PASS" : "FAIL"}  ${name}`);
+  if (!cond) ok = false;
+}
+
+check("produced strokes", plan.strokes.length >= 3);
+check("plan dimensions match", plan.width === W && plan.height === H);
+check("ordered largest-first", plan.strokes.every((s, i) =>
+  i === 0 ? true : plan.strokes[i - 1].area >= s.area));
+check("strokes carry ids in order", plan.strokes.every((s, i) => s.id === i));
+check("paths have >=2 points", plan.strokes.every((s) => s.path.length >= 2));
+check("colors are hex", plan.strokes.every((s) => /^#[0-9a-f]{6}$/.test(s.color)));
+check("hints non-empty", plan.strokes.every((s) => s.hint.length > 0));
+
+// The red square and blue disc should each surface as a stroke whose colour is
+// recognisably red / blue.
+const reds = plan.strokes.filter((s) => {
+  const r = parseInt(s.color.slice(1, 3), 16);
+  const b = parseInt(s.color.slice(5, 7), 16);
+  return r > 150 && b < 100;
+});
+const blues = plan.strokes.filter((s) => {
+  const r = parseInt(s.color.slice(1, 3), 16);
+  const b = parseInt(s.color.slice(5, 7), 16);
+  return b > 150 && r < 120;
+});
+check("found a red region", reds.length >= 1);
+check("found a blue region", blues.length >= 1);
+
+console.log("\nsample stroke:", JSON.stringify(plan.strokes[0], null, 2).slice(0, 400));
+console.log(ok ? "\nALL CHECKS PASSED" : "\nSOME CHECKS FAILED");
+process.exit(ok ? 0 : 1);
