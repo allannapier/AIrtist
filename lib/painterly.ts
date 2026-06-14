@@ -159,9 +159,14 @@ export function generatePainting(
     }
   }
 
-  // Coarse first, and within a pass lay the biggest corrections first.
-  strokes.sort((a, b) => a.level - b.level || b.error - a.error);
-  const capped = strokes.slice(0, o.maxStrokes);
+  // Keep the most impactful strokes across ALL levels — otherwise the budget
+  // is eaten by the coarse passes and the fine detail (and its narration
+  // stages) never appear. Then order coarse-to-fine for the build-up.
+  const capped =
+    strokes.length > o.maxStrokes
+      ? strokes.slice().sort((a, b) => b.error - a.error).slice(0, o.maxStrokes)
+      : strokes.slice();
+  capped.sort((a, b) => a.level - b.level || b.error - a.error);
 
   const out: BrushStroke[] = capped.map((s, i) => {
     const { band, hint } = bandFor(s.level, sizes.length);
