@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { BrushStroke, PaintingPlan } from "@/lib/types";
+import { drawDab } from "@/lib/brush";
+import type { PaintingPlan } from "@/lib/types";
 
 interface Props {
   plan: PaintingPlan;
@@ -11,42 +12,6 @@ interface Props {
 }
 
 const MAX_BACKING = 1100; // cap canvas resolution for big source images
-
-function drawDab(
-  ctx: CanvasRenderingContext2D,
-  s: BrushStroke,
-  rs: number,
-  frac: number,
-  ghost: boolean,
-) {
-  // Grow the dab along its length as it's laid down, like a brush swipe.
-  const grow = ghost ? 1 : 0.55 + 0.45 * frac;
-  const a = Math.max(0.5, (s.length / 2) * rs * grow);
-  const b = Math.max(0.5, (s.width / 2) * rs);
-  const alpha = ghost ? 0.12 : s.opacity * frac;
-
-  ctx.save();
-  ctx.translate(s.x * rs, s.y * rs);
-  ctx.rotate(s.angle);
-  ctx.scale(a, b);
-  // Solid core to 65% of the radius, then a soft rim — defined dab, not blob.
-  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-  grad.addColorStop(0, withAlpha(s.color, alpha));
-  grad.addColorStop(0.65, withAlpha(s.color, alpha));
-  grad.addColorStop(1, withAlpha(s.color, 0));
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(0, 0, 1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export default function PaintingCanvas({ plan, progress, showGhost }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -128,5 +93,3 @@ export default function PaintingCanvas({ plan, progress, showGhost }: Props) {
     </div>
   );
 }
-
-export type { BrushStroke };
