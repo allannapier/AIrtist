@@ -29,3 +29,8 @@ next-env.d.ts.bak
 
 # vercel
 .vercel
+
+# local test image fixtures (may contain personal photos)
+test/*.jpg
+test/*.jpeg
+test/*.png

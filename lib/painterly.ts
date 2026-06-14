@@ -1,4 +1,5 @@
-import { rgbToHex, type RGB } from "./color";
+import { colorName, darken, hexToRgb, rgbToHex, type RGB } from "./color";
+import { generateStrokePlan } from "./pipeline";
 import { gaussianBlurRGBA } from "./smooth";
 import type { BrushStroke, PainterlyOptions, PaintingPlan } from "./types";
 
@@ -163,10 +164,11 @@ export function generatePainting(
   strokes.sort((a, b) => a.level - b.level || b.error - a.error);
   const capped = strokes.slice(0, o.maxStrokes);
 
-  const out: BrushStroke[] = capped.map((s, i) => {
+  const dabs: BrushStroke[] = capped.map((s, i) => {
     const { band, hint } = bandFor(s.level, sizes.length);
     return {
       id: i,
+      kind: "dab",
       x: Math.round(s.x * (sourceWidth / w)),
       y: Math.round(s.y * (sourceHeight / h)),
       length: Math.round(s.length * scale * 10) / 10,
@@ -180,11 +182,49 @@ export function generatePainting(
     };
   });
 
+  // Final pass: ink the major contours so the subject reads crisply, drawn
+  // last like line work over an underpainting. Reuses the outline tracer.
+  const lines: BrushStroke[] = [];
+  if (o.lineWork) {
+    const outline = generateStrokePlan(imageData, sourceWidth, sourceHeight, {
+      maxDimension: o.maxDimension,
+      blurSigma: 1.2,
+      smoothingPasses: 1,
+      colors: o.lineColors,
+      simplifyTolerance: 2.0,
+      minAreaFraction: o.lineMinAreaFraction,
+      maxStrokes: o.lineMaxStrokes,
+    });
+    for (const s of outline.strokes) {
+      const closed: [number, number][] = s.closed ? [...s.path, s.path[0]] : s.path;
+      lines.push({
+        id: 0,
+        kind: "line",
+        x: s.centroid[0],
+        y: s.centroid[1],
+        length: 0,
+        width: Math.round(o.lineWidth * scale * 10) / 10,
+        angle: 0,
+        color: darken(s.color, 0.5),
+        opacity: 0.92,
+        level: sizes.length,
+        band: "line work",
+        hint: `Draw the ${colorName(hexToRgb(s.color))} contour — the edge of this shape.`,
+        points: closed,
+      });
+    }
+  }
+
+  const all = dabs.concat(lines);
+  all.forEach((s, i) => {
+    s.id = i;
+  });
+
   return {
     width: sourceWidth,
     height: sourceHeight,
     background: rgbToHex([meanR, meanG, meanB]),
-    strokes: out,
+    strokes: all,
   };
 }
 

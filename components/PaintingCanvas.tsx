@@ -42,6 +42,51 @@ function drawDab(
   ctx.restore();
 }
 
+function drawLine(
+  ctx: CanvasRenderingContext2D,
+  s: BrushStroke,
+  rs: number,
+  frac: number,
+  ghost: boolean,
+) {
+  const pts = s.points;
+  if (!pts || pts.length < 2) return;
+
+  let total = 0;
+  for (let k = 1; k < pts.length; k++) {
+    total += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+  }
+  const target = (ghost ? 1 : frac) * total * rs;
+
+  ctx.save();
+  ctx.strokeStyle = withAlpha(s.color, ghost ? 0.18 : s.opacity);
+  ctx.lineWidth = Math.max(1, s.width * rs);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  if (ghost) ctx.setLineDash([4, 4]);
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0] * rs, pts[0][1] * rs);
+  let acc = 0;
+  for (let k = 1; k < pts.length; k++) {
+    const x0 = pts[k - 1][0] * rs;
+    const y0 = pts[k - 1][1] * rs;
+    const x1 = pts[k][0] * rs;
+    const y1 = pts[k][1] * rs;
+    const seg = Math.hypot(x1 - x0, y1 - y0);
+    if (acc + seg <= target) {
+      ctx.lineTo(x1, y1);
+      acc += seg;
+    } else {
+      const t = seg > 0 ? (target - acc) / seg : 0;
+      ctx.lineTo(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+      break;
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function withAlpha(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -67,13 +112,16 @@ export default function PaintingCanvas({ plan, progress, showGhost }: Props) {
     ctx.fillRect(0, 0, backW, backH);
 
     const current = Math.floor(progress);
+    const paint = (s: (typeof plan.strokes)[number], frac: number, ghost: boolean) =>
+      s.kind === "line" ? drawLine(ctx, s, rs, frac, ghost) : drawDab(ctx, s, rs, frac, ghost);
+
     for (let i = 0; i < plan.strokes.length; i++) {
-      if (i < current) drawDab(ctx, plan.strokes[i], rs, 1, false);
+      if (i < current) paint(plan.strokes[i], 1, false);
       else if (i === current) {
         const frac = Math.min(1, Math.max(0, progress - current));
-        if (frac > 0) drawDab(ctx, plan.strokes[i], rs, frac, false);
+        if (frac > 0) paint(plan.strokes[i], frac, false);
       } else if (showGhost && i === current + 1) {
-        drawDab(ctx, plan.strokes[i], rs, 1, true);
+        paint(plan.strokes[i], 1, true);
       }
     }
   }, [plan, progress, showGhost, rs, backW, backH]);

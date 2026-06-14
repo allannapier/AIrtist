@@ -70,18 +70,26 @@ check(
   painting.strokes.every((s, i) => (i === 0 ? true : painting.strokes[i - 1].level <= s.level)),
 );
 check("brush ids in order", painting.strokes.every((s, i) => s.id === i));
+const dabsOnly = painting.strokes.filter((s) => s.kind === "dab");
+const linesOnly = painting.strokes.filter((s) => s.kind === "line");
 check(
-  "brushes have positive size + valid colour",
-  painting.strokes.every(
-    (s) => s.length > 0 && s.width > 0 && /^#[0-9a-f]{6}$/.test(s.color),
-  ),
+  "dabs have positive size + valid colour",
+  dabsOnly.every((s) => s.length > 0 && s.width > 0 && /^#[0-9a-f]{6}$/.test(s.color)),
 );
+check("line work was produced", linesOnly.length >= 1);
+check(
+  "line strokes carry a polyline",
+  linesOnly.every((s) => Array.isArray(s.points) && s.points!.length >= 2),
+);
+check("line work is drawn last", linesOnly.every((s, i) =>
+  i === 0 ? true : s.id > linesOnly[i - 1].id) &&
+  (linesOnly.length === 0 || linesOnly[0].id >= dabsOnly.length - 1));
 check(
   "opacity within range",
   painting.strokes.every((s) => s.opacity > 0 && s.opacity <= 1),
 );
 check("brush hints non-empty", painting.strokes.every((s) => s.hint.length > 0));
-check("respects stroke cap", painting.strokes.length <= PAINTERLY_PRESETS.balanced.maxStrokes);
+check("respects dab cap", dabsOnly.length <= PAINTERLY_PRESETS.balanced.maxStrokes);
 
 console.log("\nsample brush:", JSON.stringify(painting.strokes[0]).slice(0, 300));
 console.log(ok ? "\nALL CHECKS PASSED" : "\nSOME CHECKS FAILED");
