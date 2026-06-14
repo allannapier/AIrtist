@@ -95,7 +95,9 @@ export function generatePainting(
     const major = minor * o.lengthRatio;
     const step = Math.max(1, Math.round(minor * o.spacing));
     const sampleRad = Math.max(1, Math.round(minor * 0.5));
-    const opacity = 0.9 - 0.4 * (level / Math.max(1, sizes.length - 1));
+    // Base masses fully opaque; detail passes only slightly translucent so
+    // they still read crisply over the underpainting.
+    const opacity = 1.0 - 0.2 * (level / Math.max(1, sizes.length - 1));
 
     for (let cy = Math.floor(step / 2); cy < h; cy += step) {
       for (let cx = Math.floor(step / 2); cx < w; cx += step) {
@@ -218,7 +220,10 @@ function paintDab(
       const v = -ox * sin + oy * cos;
       const d = (u * u) / (a * a) + (v * v) / (b * b);
       if (d > 1) continue;
-      const falloff = Math.min(1, 1.3 * (1 - Math.sqrt(d)));
+      // Solid core with a soft rim: full strength inside 65% of the radius,
+      // then ramp to zero. Keeps strokes defined instead of muddy.
+      const r = Math.sqrt(d);
+      const falloff = r < 0.65 ? 1 : (1 - r) / 0.35;
       const alpha = opacity * falloff;
       if (alpha <= 0) continue;
       const i = yy * w + xx;

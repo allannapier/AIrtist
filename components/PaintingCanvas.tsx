@@ -29,8 +29,11 @@ function drawDab(
   ctx.translate(s.x * rs, s.y * rs);
   ctx.rotate(s.angle);
   ctx.scale(a, b);
+  // Solid core to 65% of the radius, then a soft rim — matches the engine's
+  // brush profile so strokes read as defined dabs, not blurry blobs.
   const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
   grad.addColorStop(0, withAlpha(s.color, alpha));
+  grad.addColorStop(0.65, withAlpha(s.color, alpha));
   grad.addColorStop(1, withAlpha(s.color, 0));
   ctx.fillStyle = grad;
   ctx.beginPath();
