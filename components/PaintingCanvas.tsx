@@ -10,7 +10,7 @@ interface Props {
   showGhost: boolean;
 }
 
-const MAX_BACKING = 1000; // cap canvas resolution for big source images
+const MAX_BACKING = 1100; // cap canvas resolution for big source images
 
 function drawDab(
   ctx: CanvasRenderingContext2D,
@@ -29,8 +29,7 @@ function drawDab(
   ctx.translate(s.x * rs, s.y * rs);
   ctx.rotate(s.angle);
   ctx.scale(a, b);
-  // Solid core to 65% of the radius, then a soft rim — matches the engine's
-  // brush profile so strokes read as defined dabs, not blurry blobs.
+  // Solid core to 65% of the radius, then a soft rim — defined dab, not blob.
   const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
   grad.addColorStop(0, withAlpha(s.color, alpha));
   grad.addColorStop(0.65, withAlpha(s.color, alpha));
@@ -51,6 +50,12 @@ function withAlpha(hex: string, alpha: number): string {
 
 export default function PaintingCanvas({ plan, progress, showGhost }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Offscreen buffer of fully-committed strokes, so each frame only paints the
+  // one in-progress dab on top — playback stays smooth at thousands of strokes.
+  const offRef = useRef<HTMLCanvasElement | null>(null);
+  const committedRef = useRef(0);
+  const planRef = useRef<PaintingPlan | null>(null);
+  const sizeRef = useRef("");
 
   const rs = Math.min(1, MAX_BACKING / Math.max(plan.width, plan.height));
   const backW = Math.round(plan.width * rs);
@@ -62,18 +67,50 @@ export default function PaintingCanvas({ plan, progress, showGhost }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, backW, backH);
-    ctx.fillStyle = plan.background;
-    ctx.fillRect(0, 0, backW, backH);
+    if (!offRef.current) offRef.current = document.createElement("canvas");
+    const off = offRef.current;
+    const sizeKey = `${backW}x${backH}`;
+    const sizeChanged = sizeRef.current !== sizeKey;
+    if (sizeChanged) {
+      off.width = backW;
+      off.height = backH;
+      sizeRef.current = sizeKey;
+    }
+    const offCtx = off.getContext("2d");
+    if (!offCtx) return;
 
-    const current = Math.floor(progress);
-    for (let i = 0; i < plan.strokes.length; i++) {
-      if (i < current) drawDab(ctx, plan.strokes[i], rs, 1, false);
-      else if (i === current) {
-        const frac = Math.min(1, Math.max(0, progress - current));
-        if (frac > 0) drawDab(ctx, plan.strokes[i], rs, frac, false);
-      } else if (showGhost && i === current + 1) {
-        drawDab(ctx, plan.strokes[i], rs, 1, true);
+    const rebuild = (upTo: number) => {
+      offCtx.clearRect(0, 0, backW, backH);
+      offCtx.fillStyle = plan.background;
+      offCtx.fillRect(0, 0, backW, backH);
+      for (let i = 0; i < upTo; i++) drawDab(offCtx, plan.strokes[i], rs, 1, false);
+      committedRef.current = upTo;
+    };
+
+    const current = Math.min(plan.strokes.length, Math.floor(progress));
+    const planChanged = planRef.current !== plan;
+
+    if (planChanged || sizeChanged) {
+      planRef.current = plan;
+      rebuild(current);
+    } else if (current < committedRef.current) {
+      rebuild(current); // scrubbed backward
+    } else if (current > committedRef.current) {
+      for (let i = committedRef.current; i < current; i++) {
+        drawDab(offCtx, plan.strokes[i], rs, 1, false);
+      }
+      committedRef.current = current;
+    }
+
+    // Blit committed strokes, then the transient in-progress dab + ghost.
+    ctx.clearRect(0, 0, backW, backH);
+    ctx.drawImage(off, 0, 0);
+
+    if (current < plan.strokes.length) {
+      const frac = Math.min(1, Math.max(0, progress - current));
+      if (frac > 0) drawDab(ctx, plan.strokes[current], rs, frac, false);
+      if (showGhost && current + 1 < plan.strokes.length) {
+        drawDab(ctx, plan.strokes[current + 1], rs, 1, true);
       }
     }
   }, [plan, progress, showGhost, rs, backW, backH]);

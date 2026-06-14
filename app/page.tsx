@@ -15,17 +15,20 @@ import {
   type StrokePlan,
 } from "@/lib/types";
 
-const SPEEDS = [0.5, 1, 2, 4, 8];
+const SPEEDS = [1, 2, 4, 8, 16, 32];
 const DETAIL_LEVELS: { value: DetailLevel; label: string }[] = [
   { value: "simple", label: "Simple" },
   { value: "balanced", label: "Balanced" },
   { value: "detailed", label: "Detailed" },
+  { value: "fine", label: "Fine" },
+  { value: "intricate", label: "Intricate" },
+  { value: "extreme", label: "Extreme" },
 ];
 const MODES: { value: RenderMode; label: string }[] = [
   { value: "painterly", label: "Painterly" },
   { value: "outline", label: "Outline" },
 ];
-const MAX_DIMENSION = 400; // load big enough for the most detailed preset
+const MAX_DIMENSION = 460; // load big enough for the most detailed preset
 
 type View =
   | { mode: "outline"; plan: StrokePlan }
@@ -39,7 +42,7 @@ export default function Page() {
   const [refUrl, setRefUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(3); // strokes per second
+  const [speed, setSpeed] = useState(4); // strokes per second
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);

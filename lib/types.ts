@@ -53,7 +53,13 @@ export interface PipelineOptions {
 /** How busy the resulting lesson should be. Simpler levels blur harder, use
  *  fewer colours and a higher minimum region size, so a photo resolves into a
  *  teachable handful of shapes rather than confetti. */
-export type DetailLevel = "simple" | "balanced" | "detailed";
+export type DetailLevel =
+  | "simple"
+  | "balanced"
+  | "detailed"
+  | "fine"
+  | "intricate"
+  | "extreme";
 
 export const DETAIL_PRESETS: Record<DetailLevel, PipelineOptions> = {
   simple: {
@@ -82,6 +88,33 @@ export const DETAIL_PRESETS: Record<DetailLevel, PipelineOptions> = {
     simplifyTolerance: 1.4,
     minAreaFraction: 0.0008,
     maxStrokes: 300,
+  },
+  fine: {
+    maxDimension: 380,
+    blurSigma: 0.8,
+    smoothingPasses: 1,
+    colors: 16,
+    simplifyTolerance: 1.2,
+    minAreaFraction: 0.0005,
+    maxStrokes: 550,
+  },
+  intricate: {
+    maxDimension: 400,
+    blurSigma: 0.6,
+    smoothingPasses: 0,
+    colors: 20,
+    simplifyTolerance: 1.0,
+    minAreaFraction: 0.00035,
+    maxStrokes: 850,
+  },
+  extreme: {
+    maxDimension: 420,
+    blurSigma: 0.5,
+    smoothingPasses: 0,
+    colors: 24,
+    simplifyTolerance: 0.9,
+    minAreaFraction: 0.00022,
+    maxStrokes: 1300,
   },
 };
 
@@ -175,6 +208,39 @@ export const PAINTERLY_PRESETS: Record<DetailLevel, PainterlyOptions> = {
     spacing: 0.4,
     errorThreshold: 110,
     maxStrokes: 3500,
+  },
+  fine: {
+    maxDimension: 440,
+    sampleBlur: 0.4,
+    levels: 9,
+    coarsestFraction: 0.06,
+    finestPx: 1.5,
+    lengthRatio: 1.7,
+    spacing: 0.38,
+    errorThreshold: 80,
+    maxStrokes: 5000,
+  },
+  intricate: {
+    maxDimension: 460,
+    sampleBlur: 0.35,
+    levels: 10,
+    coarsestFraction: 0.055,
+    finestPx: 1.3,
+    lengthRatio: 1.65,
+    spacing: 0.36,
+    errorThreshold: 55,
+    maxStrokes: 7500,
+  },
+  extreme: {
+    maxDimension: 460,
+    sampleBlur: 0.3,
+    levels: 11,
+    coarsestFraction: 0.05,
+    finestPx: 1.2,
+    lengthRatio: 1.6,
+    spacing: 0.34,
+    errorThreshold: 38,
+    maxStrokes: 10000,
   },
 };
 

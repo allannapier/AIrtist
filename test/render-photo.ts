@@ -72,7 +72,15 @@ async function main() {
 
   const imageData = { data: new Uint8ClampedArray(data), width: W, height: H } as ImageData;
 
-  for (const level of ["simple", "balanced", "detailed"] as DetailLevel[]) {
+  const levels: DetailLevel[] = [
+    "simple",
+    "balanced",
+    "detailed",
+    "fine",
+    "intricate",
+    "extreme",
+  ];
+  for (const level of levels) {
     const t0 = Date.now();
     const plan = generatePainting(imageData, W, H, PAINTERLY_PRESETS[level]);
     const ms = Date.now() - t0;
