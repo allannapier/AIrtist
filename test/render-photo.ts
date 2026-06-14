@@ -14,39 +14,8 @@ function rasterize(plan: PaintingPlan, W: number, H: number): Buffer {
   fg.fill(hx(plan.background, 3));
   fb.fill(hx(plan.background, 5));
 
-  const stamp = (cx: number, cy: number, rad: number, col: number[], op: number) => {
-    const reach = Math.ceil(rad);
-    for (let oy = -reach; oy <= reach; oy++) {
-      const yy = cy + oy;
-      if (yy < 0 || yy >= H) continue;
-      for (let ox = -reach; ox <= reach; ox++) {
-        const xx = ox + cx;
-        if (xx < 0 || xx >= W) continue;
-        if (ox * ox + oy * oy > rad * rad) continue;
-        const i = yy * W + xx;
-        fr[i] = fr[i] * (1 - op) + col[0] * op;
-        fg[i] = fg[i] * (1 - op) + col[1] * op;
-        fb[i] = fb[i] * (1 - op) + col[2] * op;
-      }
-    }
-  };
-
   for (const s of plan.strokes) {
     const col = [hx(s.color, 1), hx(s.color, 3), hx(s.color, 5)];
-    if (s.kind === "line" && s.points) {
-      const rad = Math.max(0.6, s.width / 2);
-      for (let k = 1; k < s.points.length; k++) {
-        const [x0, y0] = s.points[k - 1];
-        const [x1, y1] = s.points[k];
-        const len = Math.hypot(x1 - x0, y1 - y0);
-        const steps = Math.max(1, Math.ceil(len / 0.7));
-        for (let t = 0; t <= steps; t++) {
-          const f = t / steps;
-          stamp(Math.round(x0 + (x1 - x0) * f), Math.round(y0 + (y1 - y0) * f), rad, col, s.opacity);
-        }
-      }
-      continue;
-    }
     const cos = Math.cos(s.angle);
     const sin = Math.sin(s.angle);
     const a = s.length / 2;

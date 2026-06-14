@@ -89,33 +89,29 @@ export const DEFAULT_OPTIONS: PipelineOptions = DETAIL_PRESETS.balanced;
 
 // ─── Painterly (stroke-based rendering) ──────────────────────────────────────
 
-/** A single brush mark. Most are oriented `dab`s laid coarse-to-fine; a final
- *  band of `line` strokes inks the major contours for definition. */
+/** A single oriented brush dab. Strokes are emitted coarse-to-fine, so index 0
+ *  is the broadest base mass and later strokes are fine accents. */
 export interface BrushStroke {
   id: number;
-  /** "dab" = filled brush mark; "line" = a drawn contour polyline. */
-  kind: "dab" | "line";
   /** Centre in source-image pixels. */
   x: number;
   y: number;
   /** Major axis (length along the stroke direction), source-image pixels. */
   length: number;
-  /** Minor axis (brush width), or line thickness for `line` kind. */
+  /** Minor axis (brush width), source-image pixels. */
   width: number;
-  /** Orientation in radians, aligned to local image structure (dabs only). */
+  /** Orientation in radians, aligned to local image structure. */
   angle: number;
   /** Brush colour, sampled from the target image (hex). */
   color: string;
   /** Paint opacity 0..1. */
   opacity: number;
-  /** Coarse-to-fine pass index (0 = broadest; line work comes last). */
+  /** Coarse-to-fine pass index (0 = broadest). */
   level: number;
   /** Pedagogical band label for the lesson panel. */
   band: string;
   /** Teaching narration for this stroke. */
   hint: string;
-  /** Polyline in source-image pixels — present for `line` kind. */
-  points?: [number, number][];
 }
 
 export interface PaintingPlan {
@@ -142,68 +138,43 @@ export interface PainterlyOptions {
   spacing: number;
   /** Per-channel mean-squared error below which a cell is left alone. */
   errorThreshold: number;
-  /** Hard cap on dab strokes. */
+  /** Hard cap on total strokes. */
   maxStrokes: number;
-  /** Whether to ink the major contours as a final definition pass. */
-  lineWork: boolean;
-  /** Colour clusters used to derive contour lines (coarser = bolder shapes). */
-  lineColors: number;
-  /** Drop contour regions smaller than this fraction of the image. */
-  lineMinAreaFraction: number;
-  /** Hard cap on contour line strokes. */
-  lineMaxStrokes: number;
-  /** Line thickness in processed-image pixels. */
-  lineWidth: number;
 }
 
 export const PAINTERLY_PRESETS: Record<DetailLevel, PainterlyOptions> = {
   simple: {
     maxDimension: 340,
-    sampleBlur: 0.7,
+    sampleBlur: 0.6,
     levels: 6,
-    coarsestFraction: 0.09,
-    finestPx: 3,
-    lengthRatio: 1.8,
+    coarsestFraction: 0.085,
+    finestPx: 2.6,
+    lengthRatio: 1.9,
     spacing: 0.45,
-    errorThreshold: 300,
-    maxStrokes: 600,
-    lineWork: true,
-    lineColors: 6,
-    lineMinAreaFraction: 0.004,
-    lineMaxStrokes: 45,
-    lineWidth: 1.7,
+    errorThreshold: 280,
+    maxStrokes: 1100,
   },
   balanced: {
     maxDimension: 380,
-    sampleBlur: 0.6,
+    sampleBlur: 0.5,
     levels: 7,
-    coarsestFraction: 0.08,
-    finestPx: 2.2,
+    coarsestFraction: 0.075,
+    finestPx: 2.0,
     lengthRatio: 1.8,
     spacing: 0.42,
-    errorThreshold: 190,
-    maxStrokes: 1300,
-    lineWork: true,
-    lineColors: 7,
-    lineMinAreaFraction: 0.0025,
-    lineMaxStrokes: 75,
-    lineWidth: 1.5,
+    errorThreshold: 160,
+    maxStrokes: 2200,
   },
   detailed: {
     maxDimension: 420,
     sampleBlur: 0.45,
     levels: 8,
     coarsestFraction: 0.07,
-    finestPx: 1.8,
+    finestPx: 1.7,
     lengthRatio: 1.75,
     spacing: 0.4,
-    errorThreshold: 120,
-    maxStrokes: 2600,
-    lineWork: true,
-    lineColors: 8,
-    lineMinAreaFraction: 0.0015,
-    lineMaxStrokes: 120,
-    lineWidth: 1.3,
+    errorThreshold: 110,
+    maxStrokes: 3500,
   },
 };
 
