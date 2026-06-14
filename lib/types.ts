@@ -36,6 +36,10 @@ export interface StrokePlan {
 export interface PipelineOptions {
   /** Longest edge the image is downscaled to before processing (speed/quality). */
   maxDimension: number;
+  /** Gaussian blur sigma applied before quantisation, to merge texture noise. */
+  blurSigma: number;
+  /** Majority-filter passes over the label map, to despeckle regions. */
+  smoothingPasses: number;
   /** Number of colour clusters to quantise the image into. */
   colors: number;
   /** Douglas-Peucker tolerance, in processed-image pixels. */
@@ -46,10 +50,39 @@ export interface PipelineOptions {
   maxStrokes: number;
 }
 
-export const DEFAULT_OPTIONS: PipelineOptions = {
-  maxDimension: 320,
-  colors: 12,
-  simplifyTolerance: 1.6,
-  minAreaFraction: 0.0006,
-  maxStrokes: 350,
+/** How busy the resulting lesson should be. Simpler levels blur harder, use
+ *  fewer colours and a higher minimum region size, so a photo resolves into a
+ *  teachable handful of shapes rather than confetti. */
+export type DetailLevel = "simple" | "balanced" | "detailed";
+
+export const DETAIL_PRESETS: Record<DetailLevel, PipelineOptions> = {
+  simple: {
+    maxDimension: 300,
+    blurSigma: 2.4,
+    smoothingPasses: 2,
+    colors: 7,
+    simplifyTolerance: 2.4,
+    minAreaFraction: 0.004,
+    maxStrokes: 80,
+  },
+  balanced: {
+    maxDimension: 320,
+    blurSigma: 1.6,
+    smoothingPasses: 1,
+    colors: 10,
+    simplifyTolerance: 1.9,
+    minAreaFraction: 0.0018,
+    maxStrokes: 160,
+  },
+  detailed: {
+    maxDimension: 360,
+    blurSigma: 1.0,
+    smoothingPasses: 1,
+    colors: 14,
+    simplifyTolerance: 1.4,
+    minAreaFraction: 0.0008,
+    maxStrokes: 300,
+  },
 };
+
+export const DEFAULT_OPTIONS: PipelineOptions = DETAIL_PRESETS.balanced;

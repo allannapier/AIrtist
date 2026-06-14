@@ -2,6 +2,7 @@ import { colorName, rgbToHex, type RGB } from "./color";
 import { labelComponents } from "./components";
 import { quantize } from "./quantize";
 import { simplify } from "./simplify";
+import { gaussianBlurRGBA, majorityFilter } from "./smooth";
 import { traceBoundary } from "./trace";
 import {
   DEFAULT_OPTIONS,
@@ -66,7 +67,12 @@ export function generateStrokePlan(
   const scaleX = sourceWidth / w;
   const scaleY = sourceHeight / h;
 
-  const { labels } = quantize(data, pixelCount, o.colors);
+  // Quantise blurred pixels so texture noise collapses into broad shapes, but
+  // accumulate region colour from the original pixels for a faithful fill.
+  const smoothed = gaussianBlurRGBA(data, w, h, o.blurSigma);
+  const { labels: rawLabels } = quantize(smoothed, pixelCount, o.colors);
+  const labels =
+    o.smoothingPasses > 0 ? majorityFilter(rawLabels, w, h, o.smoothingPasses) : rawLabels;
   const { compId, components } = labelComponents(labels, data, w, h);
 
   const totalArea = pixelCount;

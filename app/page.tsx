@@ -2,14 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import StrokeCanvas from "@/components/StrokeCanvas";
-import { loadImageFile } from "@/lib/loadImage";
+import { loadImageFile, type LoadedImage } from "@/lib/loadImage";
 import { generateStrokePlan } from "@/lib/pipeline";
-import { DEFAULT_OPTIONS, type StrokePlan } from "@/lib/types";
+import {
+  DETAIL_PRESETS,
+  type DetailLevel,
+  type StrokePlan,
+} from "@/lib/types";
 
 const SPEEDS = [0.5, 1, 2, 4];
+const DETAIL_LEVELS: { value: DetailLevel; label: string }[] = [
+  { value: "simple", label: "Simple" },
+  { value: "balanced", label: "Balanced" },
+  { value: "detailed", label: "Detailed" },
+];
+const MAX_DIMENSION = 360; // load at the highest detail level's working size
 
 export default function Page() {
   const [plan, setPlan] = useState<StrokePlan | null>(null);
+  const [loaded, setLoaded] = useState<LoadedImage | null>(null);
+  const [detail, setDetail] = useState<DetailLevel>("balanced");
   const [refUrl, setRefUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -26,24 +38,20 @@ export default function Page() {
 
   const total = plan?.strokes.length ?? 0;
 
-  const handleFile = useCallback(async (file: File) => {
+  const buildPlan = useCallback(async (img: LoadedImage, level: DetailLevel) => {
     setError(null);
     setProcessing(true);
     setPlaying(false);
     setProgress(0);
     try {
-      const loaded = await loadImageFile(file, DEFAULT_OPTIONS.maxDimension);
       // Yield a frame so the spinner paints before the synchronous pipeline.
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       const next = generateStrokePlan(
-        loaded.imageData,
-        loaded.sourceWidth,
-        loaded.sourceHeight,
+        img.imageData,
+        img.sourceWidth,
+        img.sourceHeight,
+        DETAIL_PRESETS[level],
       );
-      setRefUrl((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return loaded.url;
-      });
       if (next.strokes.length === 0) {
         setError("Couldn't find drawable regions in that image. Try one with clearer shapes.");
         setPlan(null);
@@ -56,6 +64,34 @@ export default function Page() {
       setProcessing(false);
     }
   }, []);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setProcessing(true);
+      setError(null);
+      try {
+        const img = await loadImageFile(file, MAX_DIMENSION);
+        setRefUrl((old) => {
+          if (old) URL.revokeObjectURL(old);
+          return img.url;
+        });
+        setLoaded(img);
+        await buildPlan(img, detail);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't load that image.");
+        setProcessing(false);
+      }
+    },
+    [buildPlan, detail],
+  );
+
+  const changeDetail = useCallback(
+    (level: DetailLevel) => {
+      setDetail(level);
+      if (loaded) buildPlan(loaded, level);
+    },
+    [loaded, buildPlan],
+  );
 
   // Animation loop.
   useEffect(() => {
@@ -210,6 +246,22 @@ export default function Page() {
                 >
                   Restart
                 </button>
+              </div>
+
+              <div className="row">
+                <label htmlFor="detail">Detail</label>
+                <select
+                  id="detail"
+                  className="select"
+                  value={detail}
+                  onChange={(e) => changeDetail(e.target.value as DetailLevel)}
+                >
+                  {DETAIL_LEVELS.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="row">
