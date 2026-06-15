@@ -72,11 +72,6 @@ export function generatePainting(
   meanG /= n;
   meanB /= n;
 
-  // Running painted canvas, started from the mean tone.
-  const cR = new Float32Array(n).fill(meanR);
-  const cG = new Float32Array(n).fill(meanG);
-  const cB = new Float32Array(n).fill(meanB);
-
   const at = (x: number, y: number) =>
     Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x));
 
@@ -88,75 +83,84 @@ export function generatePainting(
     sizes.push(coarsest * Math.pow(o.finestPx / coarsest, t));
   }
 
-  const strokes: InternalStroke[] = [];
+  // One coarse-to-fine pass at a given error threshold. Lower threshold = more
+  // strokes. Returns candidate strokes; the canvas buffer is local to the pass.
+  const paintPass = (threshold: number): InternalStroke[] => {
+    const cR = new Float32Array(n).fill(meanR);
+    const cG = new Float32Array(n).fill(meanG);
+    const cB = new Float32Array(n).fill(meanB);
+    const strokes: InternalStroke[] = [];
 
-  for (let level = 0; level < sizes.length; level++) {
-    const minor = sizes[level];
-    const major = minor * o.lengthRatio;
-    const step = Math.max(1, Math.round(minor * o.spacing));
-    const sampleRad = Math.max(1, Math.round(minor * 0.5));
-    // Base masses fully opaque; detail passes only slightly translucent so
-    // they still read crisply over the underpainting.
-    const opacity = 1.0 - 0.2 * (level / Math.max(1, sizes.length - 1));
+    for (let level = 0; level < sizes.length; level++) {
+      const minor = sizes[level];
+      const major = minor * o.lengthRatio;
+      const step = Math.max(1, Math.round(minor * o.spacing));
+      const sampleRad = Math.max(1, Math.round(minor * 0.5));
+      // Base masses fully opaque; detail passes only slightly translucent so
+      // they still read crisply over the underpainting.
+      const opacity = 1.0 - 0.2 * (level / Math.max(1, sizes.length - 1));
 
-    for (let cy = Math.floor(step / 2); cy < h; cy += step) {
-      for (let cx = Math.floor(step / 2); cx < w; cx += step) {
-        // Average target vs. current canvas over the brush footprint.
-        let dr = 0;
-        let dg = 0;
-        let db = 0;
-        let sr = 0;
-        let sg = 0;
-        let sb = 0;
-        let count = 0;
-        for (let oy = -sampleRad; oy <= sampleRad; oy += sampleRad) {
-          for (let ox = -sampleRad; ox <= sampleRad; ox += sampleRad) {
-            const i = at(cx + ox, cy + oy);
-            sr += tR[i];
-            sg += tG[i];
-            sb += tB[i];
-            dr += (tR[i] - cR[i]) ** 2;
-            dg += (tG[i] - cG[i]) ** 2;
-            db += (tB[i] - cB[i]) ** 2;
-            count++;
+      for (let cy = Math.floor(step / 2); cy < h; cy += step) {
+        for (let cx = Math.floor(step / 2); cx < w; cx += step) {
+          // Average target vs. current canvas over the brush footprint.
+          let dr = 0;
+          let dg = 0;
+          let db = 0;
+          let sr = 0;
+          let sg = 0;
+          let sb = 0;
+          let count = 0;
+          for (let oy = -sampleRad; oy <= sampleRad; oy += sampleRad) {
+            for (let ox = -sampleRad; ox <= sampleRad; ox += sampleRad) {
+              const i = at(cx + ox, cy + oy);
+              sr += tR[i];
+              sg += tG[i];
+              sb += tB[i];
+              dr += (tR[i] - cR[i]) ** 2;
+              dg += (tG[i] - cG[i]) ** 2;
+              db += (tB[i] - cB[i]) ** 2;
+              count++;
+            }
           }
+          const error = (dr + dg + db) / count;
+          if (error <= threshold) continue;
+
+          // Orientation from the local gradient (stroke runs along the edge).
+          const gx =
+            gray[at(cx + 1, cy)] - gray[at(cx - 1, cy)] +
+            0.5 * (gray[at(cx + 1, cy - 1)] - gray[at(cx - 1, cy - 1)]) +
+            0.5 * (gray[at(cx + 1, cy + 1)] - gray[at(cx - 1, cy + 1)]);
+          const gy =
+            gray[at(cx, cy + 1)] - gray[at(cx, cy - 1)] +
+            0.5 * (gray[at(cx - 1, cy + 1)] - gray[at(cx - 1, cy - 1)]) +
+            0.5 * (gray[at(cx + 1, cy + 1)] - gray[at(cx + 1, cy - 1)]);
+          const mag = Math.hypot(gx, gy);
+          // Perpendicular to the gradient = along the edge.
+          const angle = mag > 8 ? Math.atan2(gx, -gy) : 0;
+          // In flat areas (low gradient) make the dab rounder.
+          const lengthScale = mag > 8 ? 1 : 0.6;
+
+          const color: RGB = [sr / count, sg / count, sb / count];
+          const dabLen = major * lengthScale;
+
+          strokes.push({ x: cx, y: cy, length: dabLen, width: minor, angle, color, opacity, level, error });
+          paintDab(cR, cG, cB, w, h, cx, cy, dabLen, minor, angle, color, opacity);
         }
-        const error = (dr + dg + db) / count;
-        if (error <= o.errorThreshold) continue;
-
-        // Orientation from the local gradient (stroke runs along the edge).
-        const gx =
-          gray[at(cx + 1, cy)] - gray[at(cx - 1, cy)] +
-          0.5 * (gray[at(cx + 1, cy - 1)] - gray[at(cx - 1, cy - 1)]) +
-          0.5 * (gray[at(cx + 1, cy + 1)] - gray[at(cx - 1, cy + 1)]);
-        const gy =
-          gray[at(cx, cy + 1)] - gray[at(cx, cy - 1)] +
-          0.5 * (gray[at(cx - 1, cy + 1)] - gray[at(cx - 1, cy - 1)]) +
-          0.5 * (gray[at(cx + 1, cy + 1)] - gray[at(cx + 1, cy - 1)]);
-        const mag = Math.hypot(gx, gy);
-        // Perpendicular to the gradient = along the edge.
-        const angle = mag > 8 ? Math.atan2(gx, -gy) : 0;
-        // In flat areas (low gradient) make the dab rounder.
-        const lengthScale = mag > 8 ? 1 : 0.6;
-
-        const color: RGB = [sr / count, sg / count, sb / count];
-        const dabLen = major * lengthScale;
-
-        strokes.push({
-          x: cx,
-          y: cy,
-          length: dabLen,
-          width: minor,
-          angle,
-          color,
-          opacity,
-          level,
-          error,
-        });
-
-        paintDab(cR, cG, cB, w, h, cx, cy, dabLen, minor, angle, color, opacity);
       }
     }
+    return strokes;
+  };
+
+  // Adaptive threshold: a fixed threshold under-fills low-contrast images
+  // (a flat-ish photo can yield almost no strokes). Lower it until the pass
+  // produces roughly the level's target stroke count, so coverage is driven
+  // by the chosen Detail level rather than the image's contrast.
+  const target = Math.round(o.maxStrokes * 0.9);
+  let threshold = o.errorThreshold;
+  let strokes = paintPass(threshold);
+  for (let tries = 0; strokes.length < target && threshold > 4 && tries < 6; tries++) {
+    threshold *= 0.4;
+    strokes = paintPass(threshold);
   }
 
   // Keep the most impactful strokes across ALL levels — otherwise the budget
