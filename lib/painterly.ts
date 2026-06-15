@@ -151,10 +151,13 @@ export function generatePainting(
     return strokes;
   };
 
-  // Adaptive threshold: a fixed threshold under-fills low-contrast images
-  // (a flat-ish photo can yield almost no strokes). Lower it until the pass
-  // produces roughly the level's target stroke count, so coverage is driven
-  // by the chosen Detail level rather than the image's contrast.
+  // Adaptive threshold (downward only): a fixed threshold under-fills
+  // low-contrast images, so lower it until a pass yields the target count.
+  // We never *raise* it to trim overflow — that would drop the coarse strokes
+  // that cover smooth regions and leave blank patches. Overflow is instead
+  // trimmed by keeping the highest-error strokes, which preserves coverage
+  // (each region's first, high-error covering stroke survives) while spending
+  // the rest of the budget on detail.
   const target = Math.round(o.maxStrokes * 0.9);
   let threshold = o.errorThreshold;
   let strokes = paintPass(threshold);
@@ -163,9 +166,6 @@ export function generatePainting(
     strokes = paintPass(threshold);
   }
 
-  // Keep the most impactful strokes across ALL levels — otherwise the budget
-  // is eaten by the coarse passes and the fine detail (and its narration
-  // stages) never appear. Then order coarse-to-fine for the build-up.
   const capped =
     strokes.length > o.maxStrokes
       ? strokes.slice().sort((a, b) => b.error - a.error).slice(0, o.maxStrokes)

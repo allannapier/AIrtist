@@ -41,7 +41,8 @@ const MODES: { value: RenderMode; label: string }[] = [
   { value: "painterly", label: "Painterly" },
   { value: "outline", label: "Outline" },
 ];
-const MAX_DIMENSION = 460; // load big enough for the most detailed preset
+const MAX_DIMENSION = 460; // processing resolution — kept moderate so the
+// stroke budget covers densely enough to look finished.
 
 type View =
   | { mode: "outline"; plan: StrokePlan }
@@ -51,7 +52,7 @@ export default function Page() {
   const [view, setView] = useState<View | null>(null);
   const [loaded, setLoaded] = useState<LoadedImage | null>(null);
   const [mode, setMode] = useState<RenderMode>("painterly");
-  const [detail, setDetail] = useState<DetailLevel>("balanced");
+  const [detail, setDetail] = useState<DetailLevel>("detailed");
   const [refUrl, setRefUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
