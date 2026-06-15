@@ -1,5 +1,6 @@
 import { generateStrokePlan } from "../lib/pipeline.ts";
 import { generatePainting } from "../lib/painterly.ts";
+import { mixRecipe } from "../lib/paintMixing.ts";
 import { PAINTERLY_PRESETS } from "../lib/types.ts";
 
 // Build a synthetic 80x80 image: cream background, a red square, a blue disc.
@@ -84,5 +85,26 @@ check("brush hints non-empty", painting.strokes.every((s) => s.hint.length > 0))
 check("respects stroke cap", painting.strokes.length <= PAINTERLY_PRESETS.balanced.maxStrokes);
 
 console.log("\nsample brush:", JSON.stringify(painting.strokes[0]).slice(0, 300));
+
+// ─── Paint-mixing engine ─────────────────────────────────────────────────────
+console.log("\n--- paint mixing ---");
+const samples = ["#e3242b", "#2b3a8c", "#c68e3a", "#f0e8d0", "#1c1c1c"];
+for (const hex of samples) {
+  const r = mixRecipe(hex, "watercolour");
+  const pctSum = r.parts.reduce((a, p) => a + p.pct, 0);
+  console.log(`  ${hex} -> ${r.parts.map((p) => `${p.pct}% ${p.name}`).join(" + ")} (ΔE ${r.deltaE})`);
+  check(`${hex}: parts present`, r.parts.length >= 1 && r.parts.length <= 3);
+  check(`${hex}: percentages sum to 100`, pctSum === 100);
+  check(`${hex}: mixed colour is hex`, /^#[0-9a-f]{6}$/.test(r.mixedHex));
+  check(`${hex}: reasonable fit (ΔE < 18)`, r.deltaE < 18);
+  check(`${hex}: note + value + temperature set`,
+    r.note.length > 0 && !!r.value && !!r.temperature);
+}
+// Medium changes the guidance text.
+check("medium changes the note",
+  mixRecipe("#f0e8d0", "watercolour").note !== mixRecipe("#f0e8d0", "acrylic").note);
+// Deterministic.
+check("deterministic", mixRecipe("#e3242b", "acrylic").mixedHex === mixRecipe("#e3242b", "acrylic").mixedHex);
+
 console.log(ok ? "\nALL CHECKS PASSED" : "\nSOME CHECKS FAILED");
 process.exit(ok ? 0 : 1);

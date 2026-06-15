@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PaintingCanvas from "@/components/PaintingCanvas";
 import StrokeCanvas from "@/components/StrokeCanvas";
 import { exportOutlinePNG, exportPaintingPNG } from "@/lib/exportImage";
 import { loadImageFile, type LoadedImage } from "@/lib/loadImage";
+import { mixRecipe, type Medium } from "@/lib/paintMixing";
 import { generatePainting } from "@/lib/painterly";
 import { generateStrokePlan } from "@/lib/pipeline";
 import {
@@ -61,6 +62,7 @@ export default function Page() {
   const [showFill, setShowFill] = useState(true);
   const [showGhost, setShowGhost] = useState(true);
   const [narrate, setNarrate] = useState(false);
+  const [medium, setMedium] = useState<Medium>("watercolour");
 
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
@@ -183,6 +185,11 @@ export default function Page() {
         ? (currentStroke as StrokePlan["strokes"][number]).layer
         : (currentStroke as PaintingPlan["strokes"][number]).band
       : "";
+
+  const recipe = useMemo(
+    () => (currentStroke ? mixRecipe(currentStroke.color, medium) : null),
+    [currentStroke, medium],
+  );
 
   // Audio narration — speak only when the guidance text changes (stage
   // transitions), never once per stroke, so it reads like a lesson voiceover.
@@ -334,6 +341,31 @@ export default function Page() {
                 {currentHint ?? "Press play to begin the lesson."}
               </div>
 
+              {recipe && currentStroke && (
+                <div className="mix">
+                  <div className="mix-head">
+                    <span>Mix this colour</span>
+                    <span className="spacer" />
+                    <span className="layer-pill">{recipe.value}</span>
+                    <span className="layer-pill">{recipe.temperature}</span>
+                    <span className="mix-preview" title="target ≈ mixed">
+                      <span className="mix-sw" style={{ background: currentStroke.color }} />
+                      <span style={{ color: "var(--muted-2)" }}>≈</span>
+                      <span className="mix-sw" style={{ background: recipe.mixedHex }} />
+                    </span>
+                  </div>
+                  <div className="mix-parts">
+                    {recipe.parts.map((p) => (
+                      <span className="chip" key={p.name}>
+                        <span className="dot" style={{ background: p.hex }} />
+                        {p.pct}% {p.name}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mix-note">{recipe.note}</div>
+                </div>
+              )}
+
               <div className="transport">
                 <button
                   className="icon-btn"
@@ -420,6 +452,18 @@ export default function Page() {
                         {s} strokes/s
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="medium">Medium</label>
+                  <select
+                    id="medium"
+                    className="select"
+                    value={medium}
+                    onChange={(e) => setMedium(e.target.value as Medium)}
+                  >
+                    <option value="watercolour">Watercolour</option>
+                    <option value="acrylic">Acrylic / Oil</option>
                   </select>
                 </div>
               </div>
