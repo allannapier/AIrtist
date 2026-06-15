@@ -86,6 +86,15 @@ export function IconUpload(_: P) {
   );
 }
 
+export function IconCrop(_: P) {
+  return (
+    <svg {...base}>
+      <path d="M6 2v16h16" />
+      <path d="M2 6h16v16" />
+    </svg>
+  );
+}
+
 export function IconSpark(_: P) {
   return (
     <svg viewBox="0 0 24 24" fill="#0a0c11" stroke="none">

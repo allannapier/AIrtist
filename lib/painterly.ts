@@ -1,6 +1,6 @@
 import { rgbToHex, type RGB } from "./color";
 import { gaussianBlurRGBA } from "./smooth";
-import type { BrushStroke, PainterlyOptions, PaintingPlan } from "./types";
+import type { BrushStroke, PainterlyOptions, PaintingPlan, PixelImage } from "./types";
 
 interface InternalStroke {
   x: number;
@@ -36,7 +36,7 @@ function bandFor(level: number, levels: number): { band: string; hint: string } 
  * broad base masses first, fine accents last.
  */
 export function generatePainting(
-  imageData: ImageData,
+  imageData: PixelImage,
   sourceWidth: number,
   sourceHeight: number,
   o: PainterlyOptions,

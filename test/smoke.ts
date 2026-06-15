@@ -1,6 +1,7 @@
 import { generateStrokePlan } from "../lib/pipeline.ts";
 import { generatePainting } from "../lib/painterly.ts";
 import { mixRecipe } from "../lib/paintMixing.ts";
+import { prepareImage } from "../lib/preprocess.ts";
 import { PAINTERLY_PRESETS } from "../lib/types.ts";
 
 // Build a synthetic 80x80 image: cream background, a red square, a blue disc.
@@ -105,6 +106,42 @@ check("medium changes the note",
   mixRecipe("#f0e8d0", "watercolour").note !== mixRecipe("#f0e8d0", "acrylic").note);
 // Deterministic.
 check("deterministic", mixRecipe("#e3242b", "acrylic").mixedHex === mixRecipe("#e3242b", "acrylic").mixedHex);
+
+// ─── Pre-processing (crop + background removal) ──────────────────────────────
+console.log("\n--- preprocess ---");
+{
+  // White field with a red disc in the centre (not touching the border).
+  const PW = 100, PH = 100;
+  const pdata = new Uint8ClampedArray(PW * PH * 4);
+  for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+    const p = (y * PW + x) * 4;
+    const dx = x - 50, dy = y - 50;
+    const inside = dx * dx + dy * dy < 25 * 25;
+    pdata[p] = inside ? 200 : 240;
+    pdata[p + 1] = inside ? 40 : 240;
+    pdata[p + 2] = inside ? 40 : 240;
+    pdata[p + 3] = 255;
+  }
+  const srcImg = { data: pdata, width: PW, height: PH };
+  const sample = (img: { data: Uint8ClampedArray; width: number }, x: number, y: number) => {
+    const p = (y * img.width + x) * 4;
+    return [img.data[p], img.data[p + 1], img.data[p + 2]];
+  };
+
+  const noop = prepareImage(srcImg, { x: 0, y: 0, w: 1, h: 1 }, false, 0);
+  check("no-op preserves dimensions", noop.width === PW && noop.height === PH);
+
+  const bgRemoved = prepareImage(srcImg, { x: 0, y: 0, w: 1, h: 1 }, true, 30);
+  const [cr, cg, cb] = sample(bgRemoved, 50, 50);
+  const [er, eg, eb] = sample(bgRemoved, 2, 2);
+  check("subject kept (centre still red)", cr > 150 && cg < 100 && cb < 100);
+  check("background whitened (corner ~white)", er > 245 && eg > 245 && eb > 245);
+
+  const cropped = prepareImage(srcImg, { x: 0.3, y: 0.3, w: 0.4, h: 0.4 }, false, 0);
+  check("crop resizes", cropped.width === 40 && cropped.height === 40);
+  const [mr, mg, mb] = sample(cropped, 20, 20);
+  check("crop centres on subject (red)", mr > 150 && mg < 100 && mb < 100);
+}
 
 console.log(ok ? "\nALL CHECKS PASSED" : "\nSOME CHECKS FAILED");
 process.exit(ok ? 0 : 1);

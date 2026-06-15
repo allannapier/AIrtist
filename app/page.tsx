@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PaintingCanvas from "@/components/PaintingCanvas";
+import Preparer from "@/components/Preparer";
 import StrokeCanvas from "@/components/StrokeCanvas";
 import { exportOutlinePNG, exportPaintingPNG } from "@/lib/exportImage";
 import { loadImageFile, type LoadedImage } from "@/lib/loadImage";
@@ -13,10 +14,12 @@ import {
   PAINTERLY_PRESETS,
   type DetailLevel,
   type PaintingPlan,
+  type PixelImage,
   type RenderMode,
   type StrokePlan,
 } from "@/lib/types";
 import {
+  IconCrop,
   IconDownload,
   IconImage,
   IconNext,
@@ -48,9 +51,13 @@ type View =
   | { mode: "outline"; plan: StrokePlan }
   | { mode: "painterly"; plan: PaintingPlan };
 
+type WorkImage = { image: PixelImage; url: string };
+
 export default function Page() {
   const [view, setView] = useState<View | null>(null);
   const [loaded, setLoaded] = useState<LoadedImage | null>(null);
+  const [work, setWork] = useState<WorkImage | null>(null);
+  const [phase, setPhase] = useState<"empty" | "prepare" | "studio">("empty");
   const [mode, setMode] = useState<RenderMode>("painterly");
   const [detail, setDetail] = useState<DetailLevel>("detailed");
   const [refUrl, setRefUrl] = useState<string | null>(null);
@@ -73,7 +80,7 @@ export default function Page() {
   const total = view ? view.plan.strokes.length : 0;
 
   const buildPlan = useCallback(
-    async (img: LoadedImage, m: RenderMode, level: DetailLevel) => {
+    async (image: PixelImage, m: RenderMode, level: DetailLevel) => {
       setError(null);
       setProcessing(true);
       setPlaying(false);
@@ -81,12 +88,7 @@ export default function Page() {
       try {
         await new Promise((r) => requestAnimationFrame(() => r(null)));
         if (m === "painterly") {
-          const plan = generatePainting(
-            img.imageData,
-            img.sourceWidth,
-            img.sourceHeight,
-            PAINTERLY_PRESETS[level],
-          );
+          const plan = generatePainting(image, image.width, image.height, PAINTERLY_PRESETS[level]);
           if (plan.strokes.length === 0) {
             setError("Couldn't derive strokes from that image. Try one with more contrast.");
             setView(null);
@@ -94,12 +96,7 @@ export default function Page() {
             setView({ mode: "painterly", plan });
           }
         } else {
-          const plan = generateStrokePlan(
-            img.imageData,
-            img.sourceWidth,
-            img.sourceHeight,
-            DETAIL_PRESETS[level],
-          );
+          const plan = generateStrokePlan(image, image.width, image.height, DETAIL_PRESETS[level]);
           if (plan.strokes.length === 0) {
             setError("Couldn't find drawable regions in that image. Try one with clearer shapes.");
             setView(null);
@@ -116,22 +113,35 @@ export default function Page() {
     [],
   );
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      setProcessing(true);
-      setError(null);
-      try {
-        const img = await loadImageFile(file, MAX_DIMENSION);
-        setRefUrl((old) => {
-          if (old) URL.revokeObjectURL(old);
-          return img.url;
-        });
-        setLoaded(img);
-        await buildPlan(img, mode, detail);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Couldn't load that image.");
-        setProcessing(false);
-      }
+  const handleFile = useCallback(async (file: File) => {
+    setError(null);
+    setProcessing(true);
+    try {
+      const img = await loadImageFile(file, MAX_DIMENSION);
+      setLoaded((old) => {
+        if (old) URL.revokeObjectURL(old.url);
+        return img;
+      });
+      setView(null);
+      setWork(null);
+      setPhase("prepare");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't load that image.");
+    } finally {
+      setProcessing(false);
+    }
+  }, []);
+
+  // Called by the Preparer with the cropped / cleaned-up image to paint.
+  const paint = useCallback(
+    async (prepared: PixelImage, url: string) => {
+      setWork((old) => {
+        if (old) URL.revokeObjectURL(old.url);
+        return { image: prepared, url };
+      });
+      setRefUrl(url);
+      setPhase("studio");
+      await buildPlan(prepared, mode, detail);
     },
     [buildPlan, mode, detail],
   );
@@ -139,17 +149,17 @@ export default function Page() {
   const changeMode = useCallback(
     (m: RenderMode) => {
       setMode(m);
-      if (loaded) buildPlan(loaded, m, detail);
+      if (work) buildPlan(work.image, m, detail);
     },
-    [loaded, detail, buildPlan],
+    [work, detail, buildPlan],
   );
 
   const changeDetail = useCallback(
     (level: DetailLevel) => {
       setDetail(level);
-      if (loaded) buildPlan(loaded, mode, level);
+      if (work) buildPlan(work.image, mode, level);
     },
-    [loaded, mode, buildPlan],
+    [work, mode, buildPlan],
   );
 
   // Animation loop.
@@ -274,7 +284,7 @@ export default function Page() {
         contours. Everything runs in your browser.
       </p>
 
-      {!view && !processing && (
+      {phase === "empty" && !processing && (
         <Dropzone
           dragging={dragging}
           setDragging={setDragging}
@@ -283,18 +293,22 @@ export default function Page() {
         />
       )}
 
+      {phase === "prepare" && loaded && !processing && (
+        <Preparer key={loaded.url} loaded={loaded} onPaint={paint} onCancel={() => inputRef.current?.click()} />
+      )}
+
       {processing && (
         <div className="panel">
           <div className="processing">
             <span className="spinner" />
-            Analysing image and planning strokes…
+            {phase === "prepare" ? "Loading image…" : "Analysing image and planning strokes…"}
           </div>
         </div>
       )}
 
       {error && <p className="error">{error}</p>}
 
-      {view && !processing && (
+      {phase === "studio" && view && !processing && (
         <div className="studio">
           <div className="panel">
             <div className="panel-head">
@@ -481,6 +495,10 @@ export default function Page() {
                 <button className="btn primary" onClick={downloadImage}>
                   <IconImage />
                   Save image
+                </button>
+                <button className="btn" onClick={() => setPhase("prepare")}>
+                  <IconCrop />
+                  Edit image
                 </button>
                 <button className="btn" onClick={() => inputRef.current?.click()}>
                   <IconUpload />

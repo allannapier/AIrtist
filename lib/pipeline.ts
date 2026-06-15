@@ -8,6 +8,7 @@ import {
   DEFAULT_OPTIONS,
   type Layer,
   type PipelineOptions,
+  type PixelImage,
   type Point,
   type Stroke,
   type StrokePlan,
@@ -56,7 +57,7 @@ function buildHint(layer: Layer, areaFraction: number, rgb: RGB, pos: string): s
  * Coordinates in the returned plan are expressed in source-image pixels.
  */
 export function generateStrokePlan(
-  imageData: ImageData,
+  imageData: PixelImage,
   sourceWidth: number,
   sourceHeight: number,
   opts: Partial<PipelineOptions> = {},

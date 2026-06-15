@@ -1,5 +1,13 @@
 export type Point = [number, number];
 
+/** A bare RGBA pixel buffer. Both the browser's ImageData and our own
+ *  pre-processing buffers satisfy this, so the pipeline accepts either. */
+export interface PixelImage {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
 /** Which pedagogical stage a stroke belongs to. Big forms are blocked in
  *  first, then contours, then small detail — the order an artist actually
  *  builds a drawing. */

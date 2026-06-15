@@ -533,6 +533,76 @@ button.btn.primary svg {
   opacity: 1;
 }
 
+/* Prepare (crop + tidy) */
+.prep {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .prep {
+    grid-template-columns: 1fr;
+  }
+}
+
+.crop-frame {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  background: #000;
+}
+
+.crop-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.crop-box {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(8, 10, 14, 0.62);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.crop-hint {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  background: rgba(8, 10, 14, 0.6);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.prep-preview {
+  width: 100%;
+  background: #fbfbf8;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.prep-preview canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 220px;
+}
+
 /* Paint-mixing recipe card */
 .mix {
   background: var(--panel-2);
